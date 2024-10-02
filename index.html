@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Website Extractor</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', ComicSans, Geneva, Verdana, sans-serif;
+            background-color: #121212;
+            color: #e0e0e0;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            color: #ffffff;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: #1e1e1e;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            padding: 30px;
+        }
+        .input-container {
+            display: flex;
+            align-items: center;
+        }
+        input[type="text"] {
+            flex-grow: 1;
+            padding: 12px;
+            border: 1px solid #424242;
+            border-radius: 5px;
+            background-color: #2a2a2a;
+            color: #ffffff;
+            transition: border-color 0.3s;
+            margin-right: 10px;
+        }
+        input[type="text"]:focus {
+            border-color: #bb86fc;
+            outline: none;
+        }
+        button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 5px;
+            background-color: #bb86fc;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            font-weight: bold;
+        }
+        button:hover {
+            background-color: #9b68d9;
+        }
+        #output {
+            margin-top: 20px;
+            border: 1px solid #424242;
+            border-radius: 5px;
+            padding: 15px;
+            background-color: #2a2a2a;
+            box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.2);
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        h2 {
+            color: #ffffff;
+            margin-top: 0;
+        }
+        img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 5px;
+            margin: 10px 0;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+        }
+        ul {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+        }
+        li {
+            padding: 10px 0;
+            border-bottom: 1px solid #424242;
+            word-wrap: break-word;
+        }
+        li:last-child {
+            border-bottom: none;
+        }
+        a {
+            text-decoration: none;
+            color: #bb86fc;
+            transition: color 0.3s;
+        }
+        a:hover {
+            text-decoration: underline;
+            color: #9b68d9;
+        }
+        .loading {
+            text-align: center;
+            margin-top: 20px;
+            display: none;
+            color: #ffffff;
+        }
+        @media (max-width: 600px) {
+            .input-container {
+                flex-direction: column;
+            }
+            input[type="text"] {
+                width: 100%;
+                margin-right: 0;
+                margin-bottom: 10px;
+            }
+            button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Website Extractor</h1>
+        <div class="input-container">
+            <input type="text" id="urlInput" placeholder="Insira o link do site" required>
+            <button id="fetchButton">Buscar Arquivos</button>
+        </div>
+        <div class="loading" id="loading">Carregando...</div>
+        <div id="output"></div>
+    </div>
+
+    <script>
+        async function isImage(url) {
+            try {
+                const response = await fetch(url, { method: 'HEAD' });
+                return response.ok && response.headers.get('Content-Type').startsWith('image/');
+            } catch {
+                return false;
+            }
+        }
+
+        document.getElementById('fetchButton').addEventListener('click', async () => {
+            const url = document.getElementById('urlInput').value.trim();
+            if (!url) {
+                alert("Por favor, insira um link válido.");
+                return;
+            }
+
+            const proxyUrl = 'https://api.allorigins.win/get?url=';
+            const loadingIndicator = document.getElementById('loading');
+            loadingIndicator.style.display = 'block';
+            document.getElementById('output').innerHTML = '';
+
+            try {
+                const response = await fetch(proxyUrl + encodeURIComponent(url));
+                if (!response.ok) throw new Error(`Erro ao buscar o site: ${response.status} ${response.statusText}`);
+                
+                const data = await response.json();
+                const text = data.contents;
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(text, 'text/html');
+
+                const images = Array.from(doc.images).map(img => img.src);
+                const links = Array.from(doc.querySelectorAll('link[rel="stylesheet"], script[src]')).map(link => link.href || link.src);
+
+                const validImages = await Promise.all(images.map(async img => {
+                    const valid = await isImage(img);
+                    return valid ? `<img src="${img}" alt="Imagem">` : '';
+                }));
+
+                const imagesOutput = validImages.length > 0 
+                    ? validImages.join('') 
+                    : '<p>Esse site bloqueou o nosso acesso às imagens dele.</p>';
+
+                document.getElementById('output').innerHTML = `
+                    <h2>Imagens:</h2>
+                    <div>${imagesOutput}</div>
+                    <h2>Arquivos:</h2>
+                    <ul>${links.length > 0 ? links.map(link => `<li><a href="${link}" target="_blank">${link}</a></li>`).join('') : '<li>Nenhum arquivo encontrado.</li>'}</ul>
+                `;
+            } catch (error) {
+                console.error("Erro:", error);
+                document.getElementById('output').innerHTML = `<p style="color: red;">Erro: ${error.message}</p>`;
+            } finally {
+                loadingIndicator.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
